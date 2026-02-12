@@ -1,0 +1,8 @@
+{
+  "name": "TutorConnect SA",
+  "description": "South Africa's premier online platform connecting qualified teachers with students for extra lessons, featuring live video classrooms and AI-powered study assistance.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
