@@ -43,6 +43,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
       setIsLoading(false);
 
       if (isLogin) {
+        if (email.toLowerCase() === 'admin@tutorconnect.sa') {
+          onAuthSuccess({
+            id: 'admin1',
+            name: 'Platform Admin',
+            email: 'admin@tutorconnect.sa',
+            role: UserRole.ADMIN
+          });
+          return;
+        }
+
         const teacher = MOCK_TEACHERS.find(t => t.email.toLowerCase() === email.toLowerCase());
         
         if (teacher) {
@@ -76,18 +86,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
             setError('Please fill in all fields.');
             return;
         }
-        
-        if (!email.includes('@')) {
-            setError('Please enter a valid email address.');
-            return;
-        }
-
         const newUser: User = {
             id: `user-${Date.now()}`,
             name,
             email,
             role,
-            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&background=0d9488`,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0d9488&color=fff`,
             balance: 0
         };
         onAuthSuccess(newUser);
@@ -208,12 +212,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
                  <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-700">
                     <p className="text-xs text-slate-400 dark:text-slate-500 mb-2 text-center uppercase tracking-wide font-semibold">Demo Credentials</p>
                     <div className="flex flex-col gap-2 text-xs">
+                        <button onClick={() => {setEmail('admin@tutorconnect.sa'); setPassword('password');}} className="bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 p-2 rounded text-slate-600 dark:text-slate-400 flex justify-between group transition-colors">
+                            <span>Admin: admin@tutorconnect.sa</span>
+                            <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition" />
+                        </button>
                         <button onClick={() => {setEmail('student@tutorconnect.sa'); setPassword('password');}} className="bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 p-2 rounded text-slate-600 dark:text-slate-400 flex justify-between group transition-colors">
                             <span>Student: student@tutorconnect.sa</span>
                             <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition" />
                         </button>
                          <button onClick={() => {setEmail('thandi@tutorconnect.sa'); setPassword('password');}} className="bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 p-2 rounded text-slate-600 dark:text-slate-400 flex justify-between group transition-colors">
-                            <span>Teacher: thandi@tutorconnect.sa</span>
+                            <span>Verified Teacher: thandi@tutorconnect.sa</span>
                              <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition" />
                         </button>
                     </div>

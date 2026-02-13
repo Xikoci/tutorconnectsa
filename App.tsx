@@ -8,11 +8,12 @@ import { StudentDashboard } from './views/StudentDashboard.tsx';
 import { Classroom } from './views/Classroom.tsx';
 import { TeacherProfile } from './views/TeacherProfile.tsx';
 import { LaunchRoadmap } from './views/LaunchRoadmap.tsx';
+import { AdminDashboard } from './views/AdminDashboard.tsx';
 import { PaymentModal } from './components/PaymentModal.tsx';
 import { AuthModal } from './components/AuthModal.tsx';
-import { User, UserRole, Booking, Teacher, Review } from './types.ts';
+import { User, UserRole, Booking, Teacher, Review, VerificationStatus } from './types.ts';
 import { MOCK_TEACHERS, MOCK_BOOKINGS } from './mockData.ts';
-import { Rocket, CheckCircle, X } from 'lucide-react';
+import { Rocket, CheckCircle, X, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [view, setView] = useState('home');
@@ -64,6 +65,8 @@ export default function App() {
     
     if (authenticatedUser.role === UserRole.TEACHER) {
       setView('teacher-dashboard');
+    } else if (authenticatedUser.role === UserRole.ADMIN) {
+      setView('admin-dashboard');
     } else {
       if (!selectedTeacherForBooking) {
         setView('student-dashboard');
@@ -91,77 +94,34 @@ export default function App() {
     setView('teacher-profile');
   };
 
-  const handleBookingConfirmed = (details: { date: string; time: string; method: string }) => {
-    if (!user || !selectedTeacherForBooking) return;
+  const handleUpdateTutorStatus = (teacherId: string, status: VerificationStatus) => {
+    setTeachers(prev => prev.map(t => {
+      if (t.id === teacherId) {
+        return {
+          ...t,
+          verificationStatus: status,
+          verified: status === VerificationStatus.VERIFIED
+        };
+      }
+      return t;
+    }));
 
-    const platformFee = 30;
-    const tutorFee = selectedTeacherForBooking.hourlyRate;
-    const totalPaid = tutorFee + platformFee;
+    if (user?.id === teacherId) {
+      setUser(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          verificationStatus: status,
+          verified: status === VerificationStatus.VERIFIED
+        } as Teacher;
+      });
+    }
 
-    const newBooking: Booking = {
-      id: `b${Date.now()}`,
-      teacherId: selectedTeacherForBooking.id,
-      studentId: user.id,
-      teacherName: selectedTeacherForBooking.name,
-      studentName: user.name,
-      subject: selectedTeacherForBooking.subjects[0],
-      date: details.date,
-      time: details.time,
-      duration: 1,
-      tutorFee: tutorFee,
-      platformFee: platformFee,
-      totalPaid: totalPaid,
-      status: 'upcoming',
-      meetLink: `room-${Date.now()}`,
-      paymentMethod: details.method
-    };
-
-    setBookings(prev => [newBooking, ...prev]);
-    setIsPaymentModalOpen(false);
-    setSelectedTeacherForBooking(null);
-    setView('student-dashboard');
     setNotification({ 
-      message: `Lesson with ${newBooking.teacherName} successfully booked for ${new Date(details.date).toLocaleDateString()} at ${details.time}!`, 
+      message: `Teacher status updated to ${status}.`, 
       type: 'success' 
     });
   };
-
-  const handleAddReview = (teacherId: string, rating: number, comment: string) => {
-    if (!user) {
-        openAuthModal('login');
-        return;
-    }
-
-    const newReview: Review = {
-        id: `r${Date.now()}`,
-        studentName: user.name,
-        rating,
-        comment,
-        date: new Date().toLocaleDateString()
-    };
-
-    setTeachers(prev => prev.map(t => {
-        if (t.id === teacherId) {
-            const updatedReviews = [newReview, ...t.reviews];
-            const newTotalRating = updatedReviews.reduce((acc, curr) => acc + curr.rating, 0) / updatedReviews.length;
-            return {
-                ...t,
-                reviews: updatedReviews,
-                reviewsCount: updatedReviews.length,
-                rating: Number(newTotalRating.toFixed(1))
-            };
-        }
-        return t;
-    }));
-    setNotification({ message: "Thank you! Your review has been posted.", type: 'success' });
-  };
-
-  const handleJoinClass = (bookingId: string) => {
-    setActiveBookingId(bookingId);
-    setView('classroom');
-  };
-
-  const currentProfileTeacher = teachers.find(t => t.id === selectedTeacherIdForProfile);
 
   const renderView = () => {
     switch(view) {
@@ -170,26 +130,36 @@ export default function App() {
       case 'search':
         return <FindTutors teachers={teachers} onBookTeacher={handleBookTeacher} onViewProfile={handleViewProfile} />;
       case 'teacher-profile':
-        return currentProfileTeacher ? (
+        const profileTeacher = teachers.find(t => t.id === selectedTeacherIdForProfile);
+        return profileTeacher ? (
           <TeacherProfile 
-            teacher={currentProfileTeacher} 
-            onBook={() => handleBookTeacher(currentProfileTeacher)}
+            teacher={profileTeacher} 
+            onBook={() => handleBookTeacher(profileTeacher)}
             onBack={() => setView('search')}
-            onAddReview={(rating, comment) => handleAddReview(currentProfileTeacher.id, rating, comment)}
+            onAddReview={(rating, comment) => {}}
           />
-        ) : <FindTutors teachers={teachers} onBookTeacher={handleBookTeacher} onViewProfile={handleViewProfile} />;
+        ) : null;
       case 'teacher-dashboard':
         return user?.role === UserRole.TEACHER ? (
-          <TeacherDashboard user={user} bookings={bookings} onJoinClass={handleJoinClass} />
-        ) : <Home onFindTutors={() => setView('search')} onJoinAsTeacher={() => openAuthModal('signup')} />;
+          <TeacherDashboard 
+            user={user} 
+            bookings={bookings} 
+            onJoinClass={setActiveBookingId}
+            onUpdateTutorStatus={(status) => handleUpdateTutorStatus(user.id, status)}
+          />
+        ) : null;
       case 'student-dashboard':
         return user?.role === UserRole.STUDENT ? (
-          <StudentDashboard user={user} bookings={bookings} onJoinClass={handleJoinClass} />
-        ) : <Home onFindTutors={() => setView('search')} onJoinAsTeacher={() => openAuthModal('signup')} />;
-      case 'classroom':
-        return <Classroom user={user} bookingId={activeBookingId} onLeave={() => setView(user?.role === UserRole.TEACHER ? 'teacher-dashboard' : 'student-dashboard')} />;
+          <StudentDashboard user={user} bookings={bookings} onJoinClass={setActiveBookingId} />
+        ) : null;
+      case 'admin-dashboard':
+        return user?.role === UserRole.ADMIN ? (
+          <AdminDashboard teachers={teachers} onVerify={handleUpdateTutorStatus} />
+        ) : null;
       case 'roadmap':
         return <LaunchRoadmap />;
+      case 'classroom':
+        return <Classroom user={user} bookingId={activeBookingId} onLeave={() => setView(user?.role === UserRole.TEACHER ? 'teacher-dashboard' : 'student-dashboard')} />;
       default:
         return <Home onFindTutors={() => setView('search')} onJoinAsTeacher={() => openAuthModal('signup')} />;
     }
@@ -208,9 +178,8 @@ export default function App() {
         />
       )}
       
-      {/* Toast Notification */}
       {notification && (
-        <div className="fixed top-20 right-4 z-[100] max-w-sm w-full animate-slide-up md:animate-scale-in">
+        <div className="fixed top-20 right-4 z-[100] max-w-sm w-full animate-slide-up">
           <div className={`p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border ${
             notification.type === 'success' 
               ? 'bg-emerald-50 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' 
@@ -220,7 +189,7 @@ export default function App() {
               {notification.type === 'success' ? <CheckCircle size={20} /> : <X size={20} />}
               <p className="text-sm font-bold leading-tight">{notification.message}</p>
             </div>
-            <button onClick={() => setNotification(null)} className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors">
+            <button onClick={() => setNotification(null)} className="p-1 hover:bg-black/5 rounded-lg transition-colors">
               <X size={16} />
             </button>
           </div>
@@ -235,7 +204,7 @@ export default function App() {
         isOpen={isPaymentModalOpen}
         teacher={selectedTeacherForBooking}
         onClose={() => setIsPaymentModalOpen(false)}
-        onConfirmBooking={handleBookingConfirmed}
+        onConfirmBooking={(details) => {}}
       />
 
       <AuthModal 
@@ -245,7 +214,16 @@ export default function App() {
         initialMode={authModalInitialMode}
       />
 
-      {/* Admin Floating Shortcut for the Launch Control Center */}
+      {user?.role === UserRole.ADMIN && view !== 'admin-dashboard' && (
+        <button 
+          onClick={() => setView('admin-dashboard')}
+          className="fixed bottom-24 right-6 bg-teal-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-2 hover:scale-105 transition-transform z-40"
+        >
+          <ShieldCheck size={20} />
+          <span className="font-bold text-sm">Review Queue</span>
+        </button>
+      )}
+
       {view === 'home' && (
         <button 
           onClick={() => setView('roadmap')}

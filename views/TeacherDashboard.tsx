@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User, Booking } from '../types.ts';
+import { User, Booking, Teacher, VerificationStatus } from '../types.ts';
 import { 
   Calendar, 
   DollarSign, 
@@ -16,14 +16,23 @@ import {
   ExternalLink,
   Save,
   Trash2,
-  RefreshCcw
+  RefreshCcw,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
+  ChevronRight,
+  FileText,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { syncScheduleToGoogle, generateGoogleCalendarLink } from '../services/calendarService.ts';
+import { verifySaceRegistry } from '../services/verificationService.ts';
 
 interface TeacherDashboardProps {
   user: User;
   bookings: Booking[];
   onJoinClass: (bookingId: string) => void;
+  onUpdateTutorStatus?: (status: VerificationStatus) => void;
 }
 
 const weeklyData = [
@@ -39,14 +48,20 @@ const weeklyData = [
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const TIME_SLOTS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 
-export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, bookings, onJoinClass }) => {
+export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, bookings, onJoinClass, onUpdateTutorStatus }) => {
+  const teacher = user as Teacher;
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingAvailability, setIsSavingAvailability] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success'>('idle');
+  
+  // Verification State
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [saceInput, setSaceInput] = useState(teacher.saceNumber || '');
+  const [idInput, setIdInput] = useState(teacher.idNumber || '');
 
-  const [availability, setAvailability] = useState<{ [day: string]: string[] }>({
+  const [availability, setAvailability] = useState<{ [day: string]: string[] }>(teacher.availability || {
     "Monday": ["14:00", "15:00", "16:00"],
     "Tuesday": ["15:00", "16:00"],
     "Wednesday": ["14:00", "16:00", "17:00"],
@@ -55,6 +70,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, bookin
     "Saturday": [],
     "Sunday": []
   });
+
+  const handleManualVerify = async () => {
+    if (!saceInput || !idInput) return;
+    setIsVerifying(true);
+    const result = await verifySaceRegistry(saceInput, idInput);
+    setIsVerifying(false);
+    
+    if (result.success && onUpdateTutorStatus) {
+      onUpdateTutorStatus(result.status);
+    } else {
+      alert(result.message);
+    }
+  };
 
   const toggleSlot = (day: string, time: string) => {
     setAvailability(prev => {
@@ -89,10 +117,126 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, bookin
     }
   };
 
-  const maxIncome = Math.max(...weeklyData.map(d => d.income));
+  const getStatusBadge = () => {
+    switch(teacher.verificationStatus) {
+      case VerificationStatus.VERIFIED:
+        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"><ShieldCheck size={12} /> Verified Educator</span>;
+      case VerificationStatus.PENDING:
+        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800"><RefreshCcw size={12} className="animate-spin" /> Pending Review</span>;
+      case VerificationStatus.REJECTED:
+        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800"><ShieldX size={12} /> Verification Failed</span>;
+      default:
+        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700"><Info size={12} /> Action Required</span>;
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-colors">
+      
+      {/* Verification Status Banners */}
+      {teacher.verificationStatus === VerificationStatus.VERIFIED && (
+        <div className="mb-8 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800 flex items-center gap-4 animate-scale-in">
+          <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-xl">
+            <ShieldCheck size={24} />
+          </div>
+          <div className="flex-grow">
+             <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-100 uppercase tracking-wide">Account Fully Verified</h4>
+             <p className="text-xs text-emerald-700 dark:text-emerald-400">Your SACE credentials have been approved. You are now a trusted platform educator.</p>
+          </div>
+          <CheckCircle className="text-emerald-500" size={20} />
+        </div>
+      )}
+
+      {teacher.verificationStatus === VerificationStatus.PENDING && (
+        <div className="mb-8 p-6 rounded-3xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl animate-scale-in">
+          <div className="flex items-center gap-5">
+            <div className="p-4 rounded-2xl bg-amber-100 text-amber-600">
+              <ShieldAlert size={32} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-amber-900 dark:text-amber-100">Verification Under Review</h3>
+              <p className="text-sm text-amber-700 dark:text-amber-400 opacity-90">
+                Our admin team is checking your SACE registry record. This usually takes 24-48 hours.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-amber-600 font-bold text-xs bg-amber-100/50 px-4 py-2 rounded-full">
+             <Loader2 size={16} className="animate-spin" /> Step 2: Finalizing Check
+          </div>
+        </div>
+      )}
+
+      {teacher.verificationStatus === VerificationStatus.REJECTED && (
+        <div className="mb-8 p-6 rounded-3xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl animate-scale-in">
+          <div className="flex items-center gap-5">
+            <div className="p-4 rounded-2xl bg-red-100 text-red-600">
+              <ShieldX size={32} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-red-900 dark:text-red-100">Verification Failed</h3>
+              <p className="text-sm text-red-700 dark:text-red-400 opacity-90">
+                We couldn't verify your SACE number. Please ensure it matches your ID and re-submit.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            <input 
+              type="text" 
+              placeholder="Correct SACE Number" 
+              className="px-4 py-3 rounded-xl bg-white border border-red-200 text-slate-900 outline-none focus:ring-2 focus:ring-red-500"
+              value={saceInput}
+              onChange={e => setSaceInput(e.target.value)}
+            />
+            <button 
+              onClick={handleManualVerify}
+              disabled={isVerifying}
+              className="px-6 py-3 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+            >
+              {isVerifying ? <Loader2 size={18} className="animate-spin" /> : 'Re-verify'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {teacher.verificationStatus === VerificationStatus.NOT_STARTED && (
+        <div className="mb-8 p-6 rounded-3xl bg-indigo-600 border border-indigo-400 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl animate-scale-in">
+          <div className="flex items-center gap-5">
+            <div className="p-4 rounded-2xl bg-white/10 text-white">
+              <ShieldCheck size={32} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-white">Verify Your SACE Status</h3>
+              <p className="text-sm text-indigo-100 opacity-90">
+                To start accepting payments, we need to verify your SACE registration and South African ID.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            <input 
+              type="text" 
+              placeholder="SACE Number" 
+              className="px-4 py-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder:text-white/60 outline-none focus:ring-2 focus:ring-white/50"
+              value={saceInput}
+              onChange={e => setSaceInput(e.target.value)}
+            />
+            <input 
+              type="text" 
+              placeholder="ID Number" 
+              className="px-4 py-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder:text-white/60 outline-none focus:ring-2 focus:ring-white/50"
+              value={idInput}
+              onChange={e => setIdInput(e.target.value)}
+            />
+            <button 
+              onClick={handleManualVerify}
+              disabled={isVerifying || !saceInput || !idInput}
+              className="px-6 py-3 bg-white text-indigo-700 font-black rounded-xl hover:bg-indigo-50 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+            >
+              {isVerifying ? <Loader2 size={18} className="animate-spin" /> : 'Verify Now'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sync Success Modal */}
       {showSyncModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
@@ -116,7 +260,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, bookin
 
       <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Teacher Dashboard</h1>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Teacher Dashboard</h1>
+            {getStatusBadge()}
+          </div>
           <p className="text-slate-500 dark:text-slate-400">Manage your students, earnings, and schedule in one place.</p>
         </div>
         <div className="flex flex-col items-end">
@@ -262,50 +409,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, bookin
                 </div>
               </div>
             </section>
-
-            <section className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h3 className="font-bold text-lg text-slate-900 dark:text-white">Earnings Performance</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Your weekly revenue after platform fees</p>
-                </div>
-                <button className="px-3 py-1 text-xs font-bold rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                  <RefreshCcw size={12} /> Week
-                </button>
-              </div>
-              <div className="h-64 flex items-end justify-between px-2 gap-4">
-                {weeklyData.map((d, i) => (
-                  <div key={i} className="flex-grow flex flex-col items-center group">
-                    <div className="relative w-full flex flex-col items-center">
-                      <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold text-teal-600">R{d.income}</div>
-                      <div 
-                        className={`w-full max-w-[40px] rounded-t-lg transition-all duration-700 ease-out ${i === 5 ? 'bg-teal-600' : 'bg-slate-200 dark:bg-slate-700 group-hover:bg-slate-300'}`}
-                        style={{ height: `${(d.income / maxIncome) * 100}%`, minHeight: '4px' }}
-                      />
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-tighter">{d.name}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
           </div>
 
           <div className="lg:col-span-4 space-y-8">
-            <section className="bg-teal-700 rounded-3xl shadow-xl p-8 text-white relative overflow-hidden group">
-               <div className="relative z-10">
-                 <h3 className="font-bold text-teal-100 mb-6 flex items-center justify-between text-xs uppercase tracking-widest">
-                   Payout Balance <Info size={14} />
-                 </h3>
-                 <div className="text-5xl font-black mb-2 tracking-tight">R{totalEarnings.toLocaleString()}</div>
-                 <p className="text-teal-200 text-sm mb-8 leading-relaxed">Cleared and available for withdrawal to your South African bank account.</p>
-                 <button className="w-full py-4 bg-white text-teal-800 font-black rounded-2xl text-xs uppercase tracking-widest shadow-lg transform group-hover:-translate-y-1 transition-transform">
-                   Request Payout Now
-                 </button>
-               </div>
-               <div className="absolute -bottom-12 -right-12 w-64 h-64 bg-teal-600 rounded-full opacity-30 blur-3xl group-hover:scale-110 transition-transform"></div>
-            </section>
-
-            <section className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
+             <section className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
               <div className="flex items-center justify-between mb-8">
                 <h3 className="font-black text-slate-900 dark:text-white text-lg">Upcoming Classes</h3>
                 <span className="text-[10px] bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 px-3 py-1 rounded-full font-black uppercase tracking-wider animate-pulse">Live</span>
@@ -341,31 +448,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, bookin
                   </div>
                 )}
               </div>
-            </section>
-
-            <section className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-              <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700">
-                <h3 className="font-black text-slate-900 dark:text-white flex items-center gap-2 uppercase tracking-widest text-xs">
-                  <History size={16} className="text-slate-400" /> Recent History
-                </h3>
-              </div>
-              <div className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                {bookings.filter(b => b.status === 'completed').slice(0, 4).map(b => (
-                  <div key={b.id} className="p-6 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors">
-                    <div>
-                      <div className="font-bold text-sm text-slate-800 dark:text-slate-100">{b.studentName}</div>
-                      <div className="text-[10px] text-slate-400 font-medium">{b.subject} • {new Date(b.date).toLocaleDateString()}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-black text-slate-900 dark:text-white">R{b.tutorFee}</div>
-                      <div className="text-[9px] text-teal-600 font-bold uppercase">Earned</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <button className="w-full py-4 text-xs font-black text-slate-400 uppercase tracking-widest bg-slate-50/50 dark:bg-slate-900/50 hover:text-teal-600 transition-colors">
-                View All Activity
-              </button>
             </section>
           </div>
         </div>

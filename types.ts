@@ -5,6 +5,13 @@ export enum UserRole {
   ADMIN = 'ADMIN'
 }
 
+export enum VerificationStatus {
+  NOT_STARTED = 'NOT_STARTED',
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED'
+}
+
 export interface User {
   id: string;
   name: string;
@@ -36,6 +43,9 @@ export interface Teacher extends User {
   reviewsCount: number;
   isOnline: boolean;
   verified: boolean;
+  verificationStatus: VerificationStatus;
+  saceNumber?: string;
+  idNumber?: string;
   qualifications: string[];
   reviews: Review[];
   availability: { [day: string]: string[] };
